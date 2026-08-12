@@ -49,6 +49,12 @@ public:
 
 	void HandleTurnTimer();
 
+	void HandleRematchRequest(
+		AWJSPlayerController* InRequestingPlayerController,
+		const FString& InChatMessageString);
+
+	void BroadcastChatMessage(const FString& InMessageString);
+
 	int32 FindNextAvailablePlayerIndex(int32 InStartIndex) const;
 
 protected:
@@ -63,4 +69,9 @@ protected:
 	int32 CurrentTurnPlayerIndex;
 
 	FTimerHandle TurnTimerHandle;
+
+	bool bIsWaitingForRematch;
+
+	UPROPERTY()
+	TSet<TObjectPtr<AWJSPlayerController>> RematchReadyPlayers;
 };

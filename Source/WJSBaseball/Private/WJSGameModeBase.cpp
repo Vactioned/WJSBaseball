@@ -12,6 +12,7 @@
 AWJSGameModeBase::AWJSGameModeBase()
 	: TurnDuration(10)
 	, CurrentTurnPlayerIndex(INDEX_NONE)
+	, bIsWaitingForRematch(false)
 {
 	PlayerStateClass = AWJSPlayerState::StaticClass();
 }
@@ -155,6 +156,12 @@ void AWJSGameModeBase::PrintChatMessageString(
 		return;
 	}
 
+	if (bIsWaitingForRematch == true)
+	{
+		HandleRematchRequest(InChattingPlayerController, InChatMessageString);
+		return;
+	}
+
 	if (AllPlayerControllers.IsValidIndex(CurrentTurnPlayerIndex) == false
 		|| AllPlayerControllers[CurrentTurnPlayerIndex] != InChattingPlayerController)
 	{
@@ -241,6 +248,9 @@ void AWJSGameModeBase::PrintChatMessageString(
 
 void AWJSGameModeBase::ResetGame()
 {
+	bIsWaitingForRematch = false;
+	RematchReadyPlayers.Empty();
+
 	SecretNumberString = GenerateSecretNumber();
 	UE_LOG(LogTemp, Log, TEXT("Secret Number: %s"), *SecretNumberString);
 
@@ -259,10 +269,15 @@ void AWJSGameModeBase::ResetGame()
 			WJSPlayerState->CurrentGuessCount = 0;
 			WJSPlayerState->bHasGuessedThisTurn = false;
 		}
+
+		WJSPlayerController->NotificationText =
+			FText::FromString(TEXT("새 게임을 시작합니다."));
+		WJSPlayerController->ClientRPCClearChatMessages();
 	}
 
 	CurrentTurnPlayerIndex = FindNextAvailablePlayerIndex(0);
 	StartTurn();
+	BroadcastChatMessage(TEXT("새 게임이 시작되었습니다."));
 }
 
 bool AWJSGameModeBase::JudgeGame(
@@ -319,12 +334,91 @@ bool AWJSGameModeBase::JudgeGame(
 		if (IsValid(WJSPlayerController) == true)
 		{
 			WJSPlayerController->NotificationText =
-				FText::FromString(ResultMessage);
+				FText::FromString(
+					ResultMessage
+					+ TEXT("\n아무 숫자나 입력하여 재시작"));
 		}
 	}
 
-	ResetGame();
+	GetWorldTimerManager().ClearTimer(TurnTimerHandle);
+	bIsWaitingForRematch = true;
+	RematchReadyPlayers.Empty();
+	CurrentTurnPlayerIndex = INDEX_NONE;
+
+	AWJSGameStateBase* WJSGameStateBase = GetGameState<AWJSGameStateBase>();
+	if (IsValid(WJSGameStateBase) == true)
+	{
+		WJSGameStateBase->CurrentTurnPlayerName = TEXT("Game Over");
+		WJSGameStateBase->RemainingTurnTime = 0;
+	}
+
 	return true;
+}
+
+void AWJSGameModeBase::HandleRematchRequest(
+	AWJSPlayerController* InRequestingPlayerController,
+	const FString& InChatMessageString)
+{
+	if (IsValid(InRequestingPlayerController) == false)
+	{
+		return;
+	}
+
+	if (InChatMessageString.IsEmpty() == true
+		|| InChatMessageString.IsNumeric() == false)
+	{
+		InRequestingPlayerController->ClientRPCPrintChatMessageString(
+			TEXT("재시작하려면 아무 숫자나 입력해주세요."));
+		return;
+	}
+
+	AWJSPlayerState* WJSPlayerState =
+		InRequestingPlayerController->GetPlayerState<AWJSPlayerState>();
+	if (IsValid(WJSPlayerState) == false)
+	{
+		return;
+	}
+
+	if (RematchReadyPlayers.Contains(InRequestingPlayerController) == true)
+	{
+		InRequestingPlayerController->ClientRPCPrintChatMessageString(
+			TEXT("이미 재시합에 동의했습니다."));
+		return;
+	}
+
+	RematchReadyPlayers.Add(InRequestingPlayerController);
+	BroadcastChatMessage(
+		WJSPlayerState->PlayerNameString
+		+ TEXT("이(가) 재시합에 동의하였습니다."));
+
+	int32 ConnectedPlayerCount = 0;
+	for (const TObjectPtr<AWJSPlayerController>& WJSPlayerController
+		: AllPlayerControllers)
+	{
+		if (IsValid(WJSPlayerController) == true)
+		{
+			++ConnectedPlayerCount;
+		}
+	}
+
+	if (ConnectedPlayerCount > 0
+		&& RematchReadyPlayers.Num() >= ConnectedPlayerCount)
+	{
+		BroadcastChatMessage(TEXT("모든 플레이어가 동의하여 재시합을 시작합니다."));
+		ResetGame();
+	}
+}
+
+void AWJSGameModeBase::BroadcastChatMessage(const FString& InMessageString)
+{
+	for (const TObjectPtr<AWJSPlayerController>& WJSPlayerController
+		: AllPlayerControllers)
+	{
+		if (IsValid(WJSPlayerController) == true)
+		{
+			WJSPlayerController->ClientRPCPrintChatMessageString(InMessageString);
+		}
+	}
 }
 
 void AWJSGameModeBase::StartTurn()

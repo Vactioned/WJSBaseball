@@ -75,13 +75,21 @@ void AWJSPlayerController::SetChatMessageString(const FString& InChatMessageStri
 
 void AWJSPlayerController::PrintChatMessageString(const FString& InChatMessageString)
 {
-	WJSBaseballFunctionLibrary::MyPrintString(this, InChatMessageString, 10.f);
+	WJSBaseballFunctionLibrary::MyPrintString(this, InChatMessageString, 86400.f);
 }
 
 void AWJSPlayerController::ClientRPCPrintChatMessageString_Implementation(
 	const FString& InChatMessageString)
 {
 	PrintChatMessageString(InChatMessageString);
+}
+
+void AWJSPlayerController::ClientRPCClearChatMessages_Implementation()
+{
+	if (IsValid(GEngine) == true)
+	{
+		GEngine->ClearOnScreenDebugMessages();
+	}
 }
 
 void AWJSPlayerController::ServerRPCPrintChatMessageString_Implementation(
