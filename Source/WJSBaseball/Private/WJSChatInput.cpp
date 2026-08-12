@@ -1,0 +1,42 @@
+#include "WJSChatInput.h"
+
+#include "Components/EditableTextBox.h"
+#include "WJSPlayerController.h"
+
+void UWJSChatInput::NativeConstruct()
+{
+	Super::NativeConstruct();
+
+	if (EditableTextBox_ChatInput->OnTextCommitted.IsAlreadyBound(this, &ThisClass::OnChatInputTextCommitted) == false)
+	{
+		EditableTextBox_ChatInput->OnTextCommitted.AddDynamic(this, &ThisClass::OnChatInputTextCommitted);
+	}
+}
+
+void UWJSChatInput::NativeDestruct()
+{
+	Super::NativeDestruct();
+
+	if (EditableTextBox_ChatInput->OnTextCommitted.IsAlreadyBound(this, &ThisClass::OnChatInputTextCommitted) == true)
+	{
+		EditableTextBox_ChatInput->OnTextCommitted.RemoveDynamic(this, &ThisClass::OnChatInputTextCommitted);
+	}
+}
+
+void UWJSChatInput::OnChatInputTextCommitted(const FText& Text, ETextCommit::Type CommitMethod)
+{
+	if (CommitMethod == ETextCommit::OnEnter)
+	{
+		APlayerController* OwningPlayerController = GetOwningPlayer();
+		if (IsValid(OwningPlayerController) == true)
+		{
+			AWJSPlayerController* OwningWJSPlayerController = Cast<AWJSPlayerController>(OwningPlayerController);
+			if (IsValid(OwningWJSPlayerController) == true)
+			{
+				OwningWJSPlayerController->SetChatMessageString(Text.ToString());
+
+				EditableTextBox_ChatInput->SetText(FText());
+			}
+		}
+	}
+}
